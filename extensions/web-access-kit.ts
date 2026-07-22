@@ -9,7 +9,6 @@ import {
 	truncateHead,
 	type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
-import { NodeHtmlMarkdown } from "node-html-markdown";
 import { Type } from "typebox";
 
 const FETCH_MAX_BYTES = 5 * 1024 * 1024;
@@ -144,21 +143,44 @@ async function truncateForTool(output: string, prefix: string): Promise<{
 	return { text, truncated: true, fullOutputPath };
 }
 
-const pageMarkdown = new NodeHtmlMarkdown({
-	maxConsecutiveNewlines: 2,
-	keepDataImages: false,
-	useInlineLinks: true,
-	ignore: ["script", "style", "noscript", "template", "svg", "iframe", "canvas", "video", "audio", "form"],
-});
+let defuddleModulePromise: Promise<typeof import("defuddle/node")> | undefined;
+let fallbackMarkdownModulePromise: Promise<typeof import("node-html-markdown")> | undefined;
 
-/** Convert webpage HTML into compact, model-friendly Markdown. */
-function htmlToMarkdown(html: string): string {
-	return pageMarkdown
-		.translate(html)
+function normalizeMarkdown(markdown: string): string {
+	return markdown
 		.split("\n")
 		.map((line) => line.replace(/[ \t]+$/g, ""))
 		.join("\n")
 		.trim();
+}
+
+/** Extract the main webpage content and convert it to compact Markdown. */
+async function htmlToMarkdown(html: string, url: string): Promise<string> {
+	try {
+		// Keep the relatively heavy DOM and extraction modules out of startup. The
+		// promise also ensures concurrent HTML fetches share the same import.
+		defuddleModulePromise ??= import("defuddle/node");
+		const { Defuddle } = await defuddleModulePromise;
+		const result = await Defuddle(html, url, {
+			markdown: true,
+			useAsync: false,
+		});
+		const content = normalizeMarkdown(result.content ?? "");
+		if (content) return content;
+	} catch {
+		// Preserve the previous converter as a local, no-network fallback for
+		// malformed or unsupported pages.
+	}
+
+	fallbackMarkdownModulePromise ??= import("node-html-markdown");
+	const { NodeHtmlMarkdown } = await fallbackMarkdownModulePromise;
+	const fallback = new NodeHtmlMarkdown({
+		maxConsecutiveNewlines: 2,
+		keepDataImages: false,
+		useInlineLinks: true,
+		ignore: ["script", "style", "noscript", "template", "svg", "iframe", "canvas", "video", "audio", "form"],
+	});
+	return normalizeMarkdown(fallback.translate(html));
 }
 
 function formatCurrentLocalDate(now = new Date()): string {
@@ -343,7 +365,9 @@ export default function webAccessKit(pi: ExtensionAPI) {
 			let truncation: Awaited<ReturnType<typeof truncateForTool>>;
 			if (isText) {
 				const body = await readFile(outputPath, "utf8");
-				const normalizedBody = contentType.includes("html") ? htmlToMarkdown(body) : body;
+				const normalizedBody = contentType.includes("html")
+					? await htmlToMarkdown(body, metadata.finalUrl || url.toString())
+					: body;
 				truncation = await truncateForTool(normalizedBody, "pi-web-fetch-page-full");
 				text = truncation.text || "[Empty response body]";
 			} else {
