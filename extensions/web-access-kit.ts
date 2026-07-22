@@ -300,7 +300,7 @@ export default function webAccessKit(pi: ExtensionAPI) {
 				"agy",
 				[
 					"--model",
-					"Gemini 3.5 Flash (Low)",
+					"Gemini 3.6 Flash (Low)",
 					"--sandbox",
 					"--mode",
 					"plan",
