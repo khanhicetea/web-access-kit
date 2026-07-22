@@ -161,6 +161,14 @@ function htmlToMarkdown(html: string): string {
 		.trim();
 }
 
+function formatCurrentLocalDate(now = new Date()): string {
+	const isoDate = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+		.map((part, index) => (index === 0 ? String(part).padStart(4, "0") : String(part).padStart(2, "0")))
+		.join("-");
+	const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(now);
+	return `${isoDate} (${weekday})`;
+}
+
 function searchPrompt(params: {
 	query: string;
 	max_results?: number;
@@ -260,6 +268,12 @@ async function resolveGroundingRedirects(
 }
 
 export default function webAccessKit(pi: ExtensionAPI) {
+	pi.on("before_agent_start", async (event) => {
+		return {
+			systemPrompt: `${event.systemPrompt}\nCurrent local date : ${formatCurrentLocalDate()}`,
+		};
+	});
+
 	pi.registerTool({
 		name: "web_fetch_page",
 		label: "Web Fetch Page",
