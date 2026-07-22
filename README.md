@@ -64,7 +64,8 @@ pi -e ./web-access-kit --tools web_search,web_fetch_page -p \
 ## Behavior and safety
 
 - `web_fetch_page` accepts only HTTP and HTTPS, follows redirects, limits downloads to 5 MB, converts HTML responses to compact Markdown with `node-html-markdown`, and limits model-visible output to pi's standard 2,000-line/50-KB cap. Use it for readable webpage content; use shell `curl` for APIs, binaries, auth, or raw responses.
-- `web_search` runs `agy --model 'Gemini 3.6 Flash (Low)' --sandbox --mode plan --print ...` and limits model-visible output to the same cap.
+- `web_search` runs `agy --model gemini-3.6-flash-low --sandbox --mode plan --print ...` with one comprehensive search and at most one targeted retry for a missing fact, then resolves Google grounding redirects to direct source URLs when possible. Model-visible output uses the same cap.
+- Search result details include the model, total duration, Antigravity duration, and number of resolved grounding URLs for later performance tuning.
 - Full truncated output and binary downloads are placed in temporary files and their paths are returned.
 - Do not include credentials in URLs. Tool arguments and results can be retained in pi sessions.
 - Web content is untrusted and may contain prompt injection; the bundled search prompt and skill tell agents not to follow page instructions.
